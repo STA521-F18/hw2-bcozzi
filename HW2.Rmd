@@ -24,32 +24,85 @@ This exercise involves the UN data set from `alr3` package. Install `alr3` and t
 
 0.  Preliminary read in the data.  After testing, modify the code chunk so that output, messages and warnings are suppressed.  *Exclude text from final*
 
-```{r data}
+ModernC - Percent of unmarried women using a modern method of contraception.
+Change - Annual population growth rate, percent.
+PPgdp - Per capita 2001 GDP, in US $.
+Frate - Percent of females over age 15 economically active.
+Pop - Population, thousands.
+Fertility - Expected number of live births per female, 2000
+Purban - Percent of population that is urban, 2001
+
+```{r data, echo=FALSE}
+# install.packages('alr3')
 library(alr3)
 data(UN3, package="alr3")
 help(UN3) 
 library(car)
+library(knitr)
+library(GGally)
+library(plotly)
+library(dplyr)
+library(stargazer)
+library(MASS)
+
 ```
 
 
 1. Create a summary of the data.  How many variables have missing data?  Which are quantitative and which are qualtitative?
 
+The variables with missing values are described below in the table. Additionally, all of the variables are quantitative. However, some are integers which sometimes suggests a mis-classified factor variable. To check this, I also counted to the number of unique values for each variable. Upon inspection of results, I decided that for the sake of interpretability they should remain integer values rather than factors. 
+
+
 ```{r}
+Variable.Types = unlist(lapply(UN3, class))
+Num.Unique = unlist(lapply(UN3, function(x) length(unique(x)) ))
+Num.Missing = unlist(lapply(UN3, function(x) sum(is.na(x)) ))
+
+kable(cbind(Variable.Types, Num.Unique, Num.Missing), caption = "Data Summary")
+
+kable(summary(UN3))
+
 
 ```
 
 2. What is the mean and standard deviation of each quantitative predictor?  Provide in a nicely formatted table.
 
 ```{r}
+Mean = unlist(lapply(UN3, mean, na.rm = TRUE))
+SD = unlist(lapply(UN3, sd, na.rm = TRUE))
+
+kable(cbind(Mean, SD))
 
 ```
 
 
-3. Investigate the predictors graphically, using scatterplots or other tools of your choice. Create some plots
-highlighting the relationships among the predictors. Comment
-on your findings regarding trying to predict `ModernC` from the other variables.  Are there potential outliers, nonlinear relationships or transformations that appear to be needed based on your graphical EDA?
+
+3. Investigate the predictors graphically, using scatterplots or other tools of your choice. Create some plotshighlighting the relationships among the predictors. Comment on your findings regarding trying to predict `ModernC` from the other variables. Are there potential outliers, nonlinear relationships or transformations that appear to be needed based on your graphical EDA?
+
+It looks like population has some outliers. Most of the remaining variables seem to have a linear relationship (Fertility being negatively related). Frate does not appear to have much of an impact. PPGDP has a nonlinear, albeit noticeable effect on Modern Contraception usage rate.
+
+Population has a very large range. It's so large in fact that no relationship can be discerned between it and the other variables from the scatterplots though there does appear to be a positive correlation between ModernC and population. In most of the scatterplots that include population, it appears that there are two points that are outliers (India and China). These outliers may need to be removed later or may be addressed by a variable transformation depending on the results from upcoming diagnostic plots. 
+
+To a lesser degree, Fertility and PP GDP also appear to be positively skewed and seem to show nonlinear relationships in their scatterplots. 
+
+Many of the predictors are also related to each other. In some cases, the mean functions for the plots of predictor versus predictor appear to be linear; in other cases, they are not linear. (GIVE MORE EXAMPLES)
+
+NOTE: I added a "na.omit" statement before anything was plotted. This is because the observations with at least one missing value will not be used in the model building below and I wanted the plots to reflect the data that was going to be modeled. 
+
 
 ```{r}
+pm <- ggpairs(na.omit(UN3), progress = FALSE)
+print(pm)
+
+#Creates a great interactive 3D scatterplot, but doesn't appear in PDF
+# plot_ly(x=UN3$Fertility, y=UN3$Change, z=UN3$ModernC, type="scatter3d", mode="markers",
+# xlab = "PerPersonGDP", ylab = "Perc_Urban", zlab = "ModernContraception")
+
+par(mfrow=c(1,2))
+UN3.filter = UN3 %>% filter(!rownames(UN3) %in% c("India","China"))
+
+qplot(data=na.omit(UN3),ModernC,Pop) + geom_text(aes(label=ifelse((Pop>800000),rownames(na.omit(UN3)),"")), hjust=1.1)
+qplot(data=na.omit(UN3.filter),ModernC,Pop)
 
 ```
 
@@ -57,44 +110,175 @@ on your findings regarding trying to predict `ModernC` from the other variables.
 
 4.  Use the `lm()` function to perform a multiple linear regression with `ModernC` as the response and all other variables as the predictors, using the formula `ModernC ~ .`, where the `.` includes all remaining variables in the dataframe.  Create  diagnostic residual plot from the linear model object and comment on results regarding assumptions.  How many observations are used in your model fitting?
 
+The model is fitting only 125 observations out of the original 210. 85 observations were excluded from this analysis because at least one of the variables was missing. 
+
+Q-Q Plot - Does not follow normal distribution
+The scale-location plot shows that the residuals appear to be homoscedastic, though there are some observations that are far from the fitted values
+Residuals vs leverage - There are a few points that show a very large leverage. That is, the predicted values for the remaining observations change significantly with the inclusion of these observations
+
+
 ```{r}
+
+Initial.Pred = lm(ModernC ~ ., data = UN3)
+par(mfrow=c(2,2))
+plot(Initial.Pred, ask=F)
+
+
+summary(Initial.Pred)
+nobs(Initial.Pred)
 
 ```
 
 5. Examine added variable plots `car::avPlot` or `car::avPlots`  for your model above. Are there any plots that suggest that transformations are needed for any of the terms in the model? Describe. Is it likely that any of the localities are influential for any of the terms?  Which localities?  Which terms?  
 
+These added variable plots show the relationship between Y: variability that cannot be explained by the predictors (excluding one variable) and Xi: the variability in that one variable $X_i$ that cannot be explained by the other predictors. Therefore, a relationship between these residuals shows that there is some additional variability that can be accounted for by that $X_i$. The code below performs this procedure for each of the variables in our original model. 
+
+It appears that there are several predictors that can account for additional variation beyond the other predictors in the model. Namely, the av plot for Fertility shows that it is negatively related to ModernC. Some of the other plots suggest that there may be some transformation needed before their impact on ModernC can be completely assessed. Most noticeably, Population has two very large outliers that make it difficult to discern a relationship between it and ModernC. Similarly, PPgdp and, to a lesser degree, Fertility show higher magnitude positive residuals than negative residuals. This would suggest that a transformation may be required.
+
 ```{r}
+avPlots(lm(ModernC ~ ., data = UN3))
 
 ```
+
 
 6.  Using the Box-Tidwell  `car::boxTidwell` or graphical methods find appropriate transformations of the predictor variables to be used as predictors in the linear model.  If any predictors are negative, you may need to transform so that they are non-negative.  Describe your method and  the resulting transformations.
 
+Based on the results from 3,4, and 5, I decided to include 3 variables in the Box Tidwell method to find the appropriate transformation of the predictors: Fertility, Pop, and PPgdp. When this was conducted there were no variables that were statistically significant, however Population and PPgdp still clearly needed transformation. 
+
+The Box-Tidwell estimate for population was not statistically significant, though, as mentioned in the Applied Linear Regression text, variables with such a large range are often transformed using log. Therefore, based on the previous visualizations and intuition about population, it follows that the log of population would be an appropriate transformation for this model.
+
+Additionally, for PPgdp, we notice that its p-value for the estimate in the Box-Tidwell results is not statistically significant by traditional standards (i.e. p>.05). However, this model did not allow us to contribute our prior beliefs to this estimate which, especially considering other economic studies, tend to favor a log transform of this variable. Additionally, the estimate itself is quite close to 0 which would suggest a log transformation. Therefore, a log transformation was also done to this variable. 
 
 ```{r}
+#Transform Variables to be nonnegative
+BoxTid.UN3 = na.omit(UN3)
+BoxTid.UN3$Change = BoxTid.UN3$Change + 1.1 + 1
+
+boxTidwell(ModernC~Pop+PPgdp+Fertility, other.x = ~Frate+Change+Purban, data=na.omit(BoxTid.UN3), max.iter = 100)
+
+## I begin by looking at the plots to find 
+#Check PPgdp
+par(mfrow=c(1,2))
+plot(UN3$PPgdp, UN3$ModernC)
+plot(log(UN3$PPgdp), UN3$ModernC)
+
+#Check Population - remove outliers
+plot(UN3$Pop, UN3$ModernC)
+plot(log(UN3$Pop), UN3$ModernC)
+
+
+
 
 ```
 
+
+
+
+
 7. Given the selected transformations of the predictors, select a transformation of the response using `MASS::boxcox` or `car::boxCox` and justify.
+
+Based on the results of the Box-Cox test, it appears that though the confidence interval is not centered at 1, it is close to the interval. For now, I will continue with the transformation. 
 
 
 ```{r}
+BC = boxcox(lm(ModernC~log(Pop)+log(PPgdp)+Frate+Change+Purban+Fertility, data=UN3))
+lambda = BC$x[which.max(BC$y)]
+
+UN3_BC.Transform <- UN3 %>% mutate(ModernC_t = (ModernC^lambda-1)/lambda)# %>% select(ModernC_t, Change, PPgdp, Frate, Pop, Fertility, Purban)
+rownames(UN3_BC.Transform) = rownames(UN3)
+
+Iteration2_transform = lm(ModernC_t~log(Pop)+log(PPgdp)+Frate+Change+Purban+Fertility, data=UN3_BC.Transform)
+summary(Iteration2_transform)
+
+# Untransformed outcome
+Iteration2= lm(ModernC~log(Pop)+log(PPgdp)+Frate+Change+Purban+Fertility, data=UN3_BC.Transform)
+summary(Iteration2)
 
 ```
 
 8.  Fit the regression using the transformed variables.  Provide residual plots and added variables plots and comment.  If you feel that you need additional transformations of either the response or predictors, repeat any steps until you feel satisfied.
 
-9. Start by finding the best transformation of the response and then find transformations of the predictors.  Do you end up with a different model than in 8?
-
+Overall, the diagnostic plots seem to show results that are more consistent with our assumptions about OLS regression. Notably, the log transform of population reduced the leverage India and China and there do not appear to be any other worrisome high leverage points. The QQ plot shows that there is slightly less spread on this distribution than a typical normal distribution, though this may be because of the structure of the response variable. That is, the response variable has a strict range from 0 to 100 so a more dispersed normal distribution would not be possible. Additionally, the Scale-Location and Residuals vs Fitted plots (with the fitted lines) appear to show residuals that are more consistent with our assumptions about OLS regression.
 
 ```{r}
+Iteration2 = lm(ModernC~Fertility+log(Pop)+log(PPgdp)+Frate+Change+Purban, data=UN3)
+plot(Iteration2, ask=F)
+summary(Iteration2)
+
+Iteration2_transform = lm(ModernC_t~log(Pop)+log(PPgdp)+Frate+Change+Purban+Fertility, data=UN3_BC.Transform)
+par(mfrow=c(2,2))
+plot(Iteration2_transform, ask=F)
+
+avPlots(Iteration2_transform)
+
+summary(Iteration2_transform)
 
 ```
 
+
+
+9. Start by finding the best transformation of the response and then find transformations of the predictors.  Do you end up with a different model than in 8?
+
+When running the Box-Cox transformation of the response variable first, there is a subtle change in the confidence interval for the lambda. However, this minor change in the confidence interval was significant because the interval contained 1. Therefore there was no change that needed to be made to the response variable and the predictors could be transformed based on the same rationale stated in question 6.  Diagnostic plots for this model are shown below.
+
+Now it is worth mentioning that when choosing a final model, the decision comes down to two models with identical predictors but slightly different response variables. The two tables are compared in the table below. 
+
+
+```{r results=asis}
+# Using boxcox to find the appropriate variable transformation:
+boxCox(lm(ModernC~Fertility+Pop+PPgdp+Frate+Change+Purban, data=UN3))
+
+## Make the variable transformation:
+pm <- ggpairs(na.omit(UN3), progress = FALSE)
+print(pm)
+#added variable plots
+avPlots(lm(ModernC ~Fertility+log(Pop)+log(PPgdp)+Frate+Change+Purban, data = UN3))
+
+## Box Tidwell of Predictors
+# BoxTid.UN3_t = na.omit(UN3)
+# BoxTid.UN3_t$Change = BoxTid.UN3_t$Change + 1.1 + 1
+# 
+# boxTidwell(ModernC~log(Pop)+log(PPgdp)+Fertility, other.x = ~Frate+Change+Purban, data=UN3_t, max.iter = 100)
+# boxTidwell(ModernC~Pop+PPgdp+Fertility, other.x = ~Frate+Change+Purban, data=UN3_t, max.iter = 100)
+
+# Transforming Fertility
+# lambda = 1.421
+# UN3_t = UN3_t %>% mutate(Fertility_t = (Fertility^lambda-1)/lambda) %>% select(ModernC_t, Change, PPgdp, Frate, Pop, Fertility, Fertility_t, Purban)
+# rownames(UN3_t) <- rownames(UN3)
+
+
+Iteration3 = lm(ModernC~Fertility+log(Pop)+log(PPgdp)+Frate+Change+Purban, data=UN3)
+par(mfrow=c(2,2))
+plot(Iteration3, ask=F) 
+##
+# 1. Show that the response variable does not need to be transformed
+# 2. Show that the transformed predictor variables do not require further transformation
+# 3. Compare the two models 
+
+stargazer(Iteration2_transform,Iteration3, header = FALSE, type = "latex", single.row = TRUE, table.placement = "h")
+
+
+```
+
+
+
+
 10.  Are there any outliers or influential points in the data?  Explain.  If so, refit the model after removing any outliers and comment on residual plots.
+
+We noticed from prior added plots of population that India and China were both influential points because of their extraordinarily large population. These two countries had a noticeable impact on the predictions of the other observations as seen through their high leverage values, though they did not have a very large Cook's distance which also takes into account their residuals. However, this observation occurred before the variable transformation to population and with that update they did not appear to be influential points anymore. To confirm there are no new influential points, I used the Bonferroni test which does not any statistically significant outliers.
 
 
 ```{r}
+abs.ti = abs(rstudent(Iteration3))
+pval= 2*(1- pt(abs.ti, Iteration3$df - 1))
+min(pval) < .05/nrow(Iteration3)
+sum(pval < .05/nrow(Iteration3))
 
+
+UN3.rm_IC = UN3 %>% filter(!rownames(UN3)%in% c("India","China"))
+Iteration3.rm_IC = lm(ModernC~log(PPgdp)+log(Pop)+Frate+Change+Fertility, data=na.omit(UN3.rm_IC))
+
+plot(Iteration3, ask=F)
 ```
 
 ## Summary of Results
@@ -103,14 +287,31 @@ on your findings regarding trying to predict `ModernC` from the other variables.
 
 
 ```{r}
+Iteration2 = lm(ModernC~log(Fertility)+Pop+log(PPgdp)+Frate+Change+Purban, data=UN3)
+
+ModernC1.lm = lm(ModernC~log(PPgdp)+log(Pop)+Frate, data=na.omit(UN3))
+ModernC2.lm = lm(ModernC~log(PPgdp)+log(Pop)+Frate+Change, data=na.omit(UN3))
+ModernC3.lm = lm(ModernC~log(PPgdp)+log(Pop)+Frate+Change+Fertility, data=na.omit(UN3))
+ModernC4.lm = lm(ModernC~log(PPgdp)+log(Pop)+Frate+Change+Fertility+Purban, data=na.omit(UN3))
+
+anova(ModernC1.lm, ModernC2.lm, ModernC3.lm, ModernC4.lm)
+stargazer(anova(ModernC1.lm, ModernC2.lm, ModernC3.lm, ModernC4.lm), title = "Model Comparison")
+
+FinalModel = lm(ModernC~log(PPgdp)+log(Pop)+Frate+Change+Fertility, data=na.omit(UN3))
+summary(FinalModel)
+plot(FinalModel, ask = F)
+
+stargazer(FinalModel, header = F, type = "latex", single.row = T, table.placement = "h")
 
 ```
 
 
-12. Provide a paragraph summarizing your final model  and findings suitable for the US envoy to the UN after adjusting for outliers or influential points.   You should provide a justification for any case deletions in your final model
+12. Provide a paragraph summarizing your final model and findings suitable for the US envoy to the UN after adjusting for outliers or influential points.   You should provide a justification for any case deletions in your final model
 
 
 ```{r}
+summary(FinalModel)
+
 
 ```
 
@@ -120,5 +321,46 @@ on your findings regarding trying to predict `ModernC` from the other variables.
     
 13. Prove that the intercept in the added variable scatter plot will always be zero.  _Hint:  use the fact that if $H$ is the project matrix which contains a column of ones, then $1_n^T (I - H) = 0$.  Use this to show that the sample mean of residuals will always be zero if there is an intercept._
 
+We begin by defining the equation for the added variable scatterplot:_
+$$ \hat{e}_{(Y)} = \mathbf{1}_n^T\hat{\beta_0} + \hat{\beta_1}\hat{e}_{X_j} $$ Where $X_j$ represents the jth column of the design matrix that we are using for our added variable plot. 
+$$ (I-H)Y = \mathbf{1}_n^T\hat{\beta_0} + \hat{\beta_1}(I-H)X_j $$
+$$ (I-H)Y = \mathbf{1}_n^T\hat{\beta_0} + ([(I-H)X_j]^T[(I-H)X_j])^{-1}[(I-H)X_j]^T Y (I-H)X_j $$ We can expand $\hat{\beta_1}$ by using its definition in this case as $(X^TX)^{-1}X$ where $X$ is substituted for $(I-H)X_j$.
+
+
+
+$$ X_j^T(I-H)Y = X_j^T \mathbf{1}_n^T\hat{\beta_0} +X_j^T[X_j^T(I-H)X_j]^{-1}X_j^T(I-H)Y(I-H)X_j$$ Multiplying both sides by $X_j^T$.
+
+
+$$ X_j^T(I-H)Y = X_j^T \mathbf{1}_n^T\hat{\beta_0} + X_j^T\underbrace{[X_j^T(I-H)X_j]^{-1}}_{scalar}\underbrace{X_j^T(I-H)Y}_{scalar}(I-H)X_j$$
+
+Rearranging the scalars, we can cancel out the inverse of $[X_j^T(I-H)X_j]$.\\
+$$ X_j^T(I-H)Y = \Sigma X_j \hat{\beta_0} +  X_j^T(I-H)Y$$
+$$ 0 = \Sigma X_j \hat{\beta_0}$$
+
+This last statement must then be true when $\beta_0 = 0$ or, in other words, when the intercept of the added variable plot is 0. 
 
 14. For multiple regression with more than 2 predictors, say a full model given by `Y ~ X1 + X2 + ... Xp`   we create the added variable plot for variable `j` by regressing `Y` on all of the `X`'s except `Xj` to form `e_Y` and then regressing `Xj` on all of the other X's to form `e_X`.  Confirm that the slope in a manually constructed added variable plot for one of the predictors  in Ex. 10 is the same as the estimate from your model. 
+
+We first can specify the design matrix and response for this problem. Let the `Xj` be Fertility. Then the remaining `X`'s will be Pop, PPgdp Frate, Change, Purban. With this, we will construct two linear models and find their residuals. 
+
+```{r}
+Y = lm(ModernC ~ PPgdp + Pop + Frate + Change + Purban, data = na.omit(UN3))
+X = lm(Fertility ~ PPgdp + Pop  + Frate + Change + Purban, data =  na.omit(UN3))
+
+av.plot = lm(residuals(Y) ~ residuals(X)) 
+summary(av.plot)$coefficients
+
+row1 = coef(summary(av.plot))["residuals(X)",c("Estimate","t value")]
+row2 = coef(summary(Initial.Pred))["Fertility",c("Estimate","t value")]
+
+kable(data.frame(round(rbind(row1,row2), digits=2), row.names = c("AV Estimate", "Initial Estimate")))
+
+```
+
+We notice that the two estimates are equal from the table. It is also worth noting that though the estimates are the same, the t statistics differ slightly. This is likely because of the different degrees of freedom in the two tests.
+
+
+
+
+
+
