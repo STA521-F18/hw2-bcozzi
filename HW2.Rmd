@@ -1,6 +1,6 @@
 ---
 title: "HW2 STA521 Fall18"
-author: '[Your Name Here, netid and github username here]'
+author: 'Brian Cozzi, netID: bc205, Github: bcozzi'
 date: "Due September 23, 2018 5pm"
 output:
   pdf_document: default
@@ -13,7 +13,7 @@ output:
 Readings: Chapters 3-4 in Weisberg Applied Linear Regression
 
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -28,7 +28,7 @@ Pop - Population, thousands.
 Fertility - Expected number of live births per female, 2000
 Purban - Percent of population that is urban, 2001
 
-```{r data, echo=FALSE}
+```{r data, echo=FALSE,, warning=FALSE, message=FALSE}
 # install.packages('alr3')
 library(alr3)
 data(UN3, package="alr3")
@@ -109,7 +109,7 @@ qplot(data=na.omit(UN3.filter),ModernC,Pop)
 The model is fitting only 125 observations out of the original 210. 85 observations were excluded from this analysis because at least one of the variables was missing. 
 
 Q-Q Plot -Does not follow normal distribution exactly most noticeably because it has heavy tails. 
-The scale-location plot shows that the residuals appear to be homoscedastic, though there are some observations that are far from the fitted values
+The scale-location plot shows that the residuals appear to be homoscedastic, though there are some observations that are far from the fitted values.
 Residuals vs leverage - There are a few points that show a very large leverage. That is, the predicted values for the remaining observations change significantly with the inclusion of these observations
 
 
@@ -118,10 +118,6 @@ Residuals vs leverage - There are a few points that show a very large leverage. 
 Initial.Pred = lm(ModernC ~ ., data = UN3)
 par(mfrow=c(2,2))
 plot(Initial.Pred, ask=F)
-
-# summary(Initial.Pred)
-# nobs(Initial.Pred)
-
 ```
 
 5. Examine added variable plots `car::avPlot` or `car::avPlots`  for your model above. Are there any plots that suggest that transformations are needed for any of the terms in the model? Describe. Is it likely that any of the localities are influential for any of the terms?  Which localities?  Which terms?  
@@ -151,7 +147,6 @@ BoxTid.UN3$Change = BoxTid.UN3$Change + 1.1 + 1
 
 boxTidwell(ModernC~Pop+PPgdp+Fertility, other.x = ~Frate+Change+Purban, data=na.omit(BoxTid.UN3), max.iter = 100)
 
-## I begin by looking at the plots to find 
 #Check PPgdp
 par(mfrow=c(1,2))
 plot(UN3$PPgdp, UN3$ModernC)
@@ -176,11 +171,10 @@ Based on the results of the Box-Cox test, it appears that though the confidence 
 BC = boxcox(lm(ModernC~log(Pop)+log(PPgdp)+Frate+Change+Purban+Fertility, data=UN3))
 lambda = BC$x[which.max(BC$y)]
 
-UN3_BC.Transform <- UN3 %>% mutate(ModernC_t = (ModernC^lambda-1)/lambda)# %>% select(ModernC_t, Change, PPgdp, Frate, Pop, Fertility, Purban)
+UN3_BC.Transform <- UN3 %>% mutate(ModernC_t = (ModernC^lambda-1)/lambda)
 rownames(UN3_BC.Transform) = rownames(UN3)
 
 Iteration2_transform = lm(ModernC_t~log(Pop)+log(PPgdp)+Frate+Change+Purban+Fertility, data=UN3_BC.Transform)
-# summary(Iteration2_transform)
 
 # Untransformed outcome
 Iteration2= lm(ModernC~log(Pop)+log(PPgdp)+Frate+Change+Purban+Fertility, data=UN3_BC.Transform)
@@ -193,20 +187,12 @@ Iteration2= lm(ModernC~log(Pop)+log(PPgdp)+Frate+Change+Purban+Fertility, data=U
 Overall, the diagnostic plots seem to show results that are more consistent with our assumptions about OLS regression. Notably, the log transform of population reduced the leverage India and China and there do not appear to be any other worrisome high leverage points. The QQ plot shows that there is slightly less spread on this distribution than a typical normal distribution, though this may be because of the structure of the response variable. That is, the response variable has a strict range from 0 to 100 so a more dispersed normal distribution would not be possible. Additionally, the Scale-Location and Residuals vs Fitted plots (with the fitted lines) appear to show residuals that are more consistent with our assumptions about OLS regression.
 
 ```{r, warning=FALSE, message=FALSE}
-# Iteration2 = lm(ModernC~Fertility+log(Pop)+log(PPgdp)+Frate+Change+Purban, data=UN3)
-# plot(Iteration2, ask=F)
-# summary(Iteration2)
 
 Iteration2_transform = lm(ModernC_t~log(Pop)+log(PPgdp)+Frate+Change+Purban+Fertility, data=UN3_BC.Transform)
 par(mfrow=c(2,2))
 plot(Iteration2_transform, ask=F)
 
 avPlots(Iteration2_transform)
-
-# summary(Iteration2_transform)
-
-
-### Add stargazer table to show comparison to original model's p-values
 
 ```
 
@@ -226,29 +212,12 @@ boxCox(lm(ModernC~Fertility+Pop+PPgdp+Frate+Change+Purban, data=UN3))
 ## Make the variable transformation:
 pm <- ggpairs(na.omit(UN3), progress = FALSE)
 print(pm)
-#added variable plots
+# Added variable plots
 avPlots(lm(ModernC ~Fertility+log(Pop)+log(PPgdp)+Frate+Change+Purban, data = UN3))
-
-## Box Tidwell of Predictors
-# BoxTid.UN3_t = na.omit(UN3)
-# BoxTid.UN3_t$Change = BoxTid.UN3_t$Change + 1.1 + 1
-# 
-# boxTidwell(ModernC~log(Pop)+log(PPgdp)+Fertility, other.x = ~Frate+Change+Purban, data=UN3_t, max.iter = 100)
-# boxTidwell(ModernC~Pop+PPgdp+Fertility, other.x = ~Frate+Change+Purban, data=UN3_t, max.iter = 100)
-
-# Transforming Fertility
-# lambda = 1.421
-# UN3_t = UN3_t %>% mutate(Fertility_t = (Fertility^lambda-1)/lambda) %>% select(ModernC_t, Change, PPgdp, Frate, Pop, Fertility, Fertility_t, Purban)
-# rownames(UN3_t) <- rownames(UN3)
-
 
 Iteration3 = lm(ModernC~Fertility+log(Pop)+log(PPgdp)+Frate+Change+Purban, data=UN3)
 par(mfrow=c(2,2))
 plot(Iteration3, ask=F) 
-##
-# 1. Show that the response variable does not need to be transformed
-# 2. Show that the transformed predictor variables do not require further transformation
-# 3. Compare the two models 
 ```
 
 ```{r, results='asis', warning=FALSE, message=FALSE}
@@ -270,11 +239,6 @@ pval= 2*(1- pt(abs.ti, Iteration3$df - 1))
 min(pval) < .05/nrow(Iteration3)
 sum(pval < .05/nrow(Iteration3))
 
-
-# UN3.rm_IC = UN3 %>% filter(!rownames(UN3)%in% c("India","China"))
-# Iteration3.rm_IC = lm(ModernC~log(PPgdp)+log(Pop)+Frate+Change+Fertility, data=na.omit(UN3.rm_IC))
-
-# plot(Iteration3, ask=F)
 ```
 
 ## Summary of Results
@@ -369,7 +333,7 @@ $$ \hat{e}_Y = (I-H)Y $$ Multiplying both sides by $1^T_N$ we get
 $$ \mathbf{1}^T_N \hat{e}_Y = 1^T_N  (I-H)Y $$
 From what we were given above, we see that $1_n^T (I - H) = 0$ so  
 $$ \mathbf{1}^T_N \hat{e}_Y = \Sigma_{i=1}^N \hat{e}_{i,Y} = 0  $$
-Multiplying both sides by $\frac{1}{n}$ we see that the mean predicted residuals for y is 0. 
+Multiplying both sides by $\frac{1}{n}$ we see that the mean predicted residuals for y is 0 or, in other words, the intercept of the added variable plot is 0.  
 
 14. For multiple regression with more than 2 predictors, say a full model given by `Y ~ X1 + X2 + ... Xp`   we create the added variable plot for variable `j` by regressing `Y` on all of the `X`'s except `Xj` to form `e_Y` and then regressing `Xj` on all of the other X's to form `e_X`.  Confirm that the slope in a manually constructed added variable plot for one of the predictors  in Ex. 10 is the same as the estimate from your model. 
 
